@@ -1,0 +1,43 @@
+Configuration:
+  shutdownHook: disable
+  properties:
+    property:
+      name: baseDir
+      value: ${env:CORALOGIX_LOGDIR:-./log}
+  appenders:
+    Console:
+      name: stdout
+      PatternLayout:
+        Pattern: "[%p] %d{ISO8601} %c{5} %t %m\n"
+
+  Loggers:
+
+    #    logger:
+    #      - name: org.apache.kafka.streams.state.internals.NamedCache
+    #        level: trace
+    #        additivity: false
+    #        AppenderRef:
+    #          - ref: stdout
+    #
+    #      - name: org.apache.kafka.streams.processor.internals.StreamTask
+    #        level: trace
+    #        additivity: false
+    #        AppenderRef:
+    #          - ref: stdout
+    #
+    #      - name: org.apache.kafka.streams.state.internals.ThreadCache
+    #        level: trace
+    #        additivity: false
+    #        AppenderRef:
+    #          - ref: stdout
+    #
+    #      - name: org.apache.kafka.streams.processor.internals.StreamThread
+    #        level: trace
+    #        additivity: false
+    #        AppenderRef:
+    #          - ref: stdout
+
+    asyncRoot:
+      level: ${env:LOG_LEVEL:-info}
+      AppenderRef:
+        - ref: stdout

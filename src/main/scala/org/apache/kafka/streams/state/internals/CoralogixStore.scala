@@ -15,6 +15,7 @@ import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.{GetObjectRequest, GetObjectResponse}
 import tools.EitherOps.EitherOps
+import tools.{Archiver, CheckPointCreator, UploadS3ClientForStore}
 
 import java.io.{File, FileOutputStream}
 import scala.jdk.CollectionConverters.{mapAsScalaMapConverter, mutableMapAsJavaMapConverter}
@@ -86,97 +87,28 @@ object CoralogixStore extends Logging {
 
     override def flush(): Unit = {
       super.flush()
-      //      val newContext = context.asInstanceOf[ProcessorContextImpl]
-      //
-      //      val stateDir = newContext.stateDir()
-      //      val storeName = name();
-      //      val topic = newContext.changelogFor(storeName)
-      //      val partition = newContext.taskId.partition()
-      //      val tp = new TopicPartition(topic, partition)
-      //      val offset = newContext.recordCollector().offsets().get(tp)
-      //
-      //      if (offset != null) {
-      //        val storePath = s"${stateDir.getAbsolutePath}/$storeName"
-      //        val tempDir = Files.createTempDirectory(s"$partition-$storeName")
-      //
-      //        val files = for {
-      //          a <- Archiver(tempDir.toFile, offset: Long, new File(storePath)).archive()
-      //          c <- CheckPointCreator(tempDir.toFile, offset).create()
-      //          u <- S3ClientForStore(
-      //            bucket = "cx-snapshot-test",
-      //            prefix = "snapshots",
-      //            region = Region.EU_NORTH_1,
-      //            storeName = storeName,
-      //            partition = partition,
-      //            offset = offset
-      //
-      //          ).uploadStateStore(a, c)
-      //        } yield (a, c)
-
-      println()
-
-    }
-
-    override def init(context: StateStoreContext, root: StateStore): Unit = {
-      this.context = context
-      this.root = root
-        val newContext = context.asInstanceOf[ProcessorContextImpl]
-        val storeName = name();
-        val topic = newContext.changelogFor(storeName)
-        val partition = newContext.taskId.partition()
-        val tp = new TopicPartition(topic, partition)
-         if(!Option(snapshotStoreListener.taskStore.get(TppStore(tp, storeName))).getOrElse(false))
-            getSnapshotStore(context)
-
-      super.init(context, root)
-
-
-    }
-
-    override def close(): Unit = {
       val newContext = context.asInstanceOf[ProcessorContextImpl]
-      super.close()
-    }
+      val stateDir = newContext.stateDir()
+      val storeName = name();
+      val topic = newContext.changelogFor(storeName)
+      val partition = newContext.taskId.partition()
+      val tp = new TopicPartition(topic, partition)
+      val offset = newContext.recordCollector().offsets().get(tp)
 
-    private def getSnapshotStore(context: StateStoreContext) = {
-      val localCheckPointFile = getLocalCheckpointFile(context)
-      val remoteCheckPoint = fetchRemoteCheckPointFile(context)
-      if (shouldFetchStateStoreFromSnapshot(localCheckPointFile, remoteCheckPoint)) {
-        fetchAndWriteLocally(context) ->
-          overrideLocalCheckPointFile(context, localCheckPointFile, remoteCheckPoint)
-      }
+      if (offset != null) {
+        val storePath = s"${stateDir.getAbsolutePath}/$storeName"
+        val tempDir = Files.createTempDirectory(s"$partition-$storeName")
+        val files = for {
+          archivedFile <- Archiver(tempDir.toFile, offset: Long, new File(storePath)).archive()
+          checkpointFile <- CheckPointCreator(tempDir.toFile, offset).create()
+          uploadResultTriple <- UploadS3ClientForStore("test", "inner", Region.US_EAST_1, storeName, partition).uploadStateStore(archivedFile, checkpointFile)
+        } yield uploadResultTriple
 
-    }
+        files.foreach(triple => println(triple))
 
-    private def overrideLocalCheckPointFile(context: StateStoreContext, localCheckPointFile: Either[IllegalArgumentException, OffsetCheckpoint], remoteCheckPoint: Either[Throwable, OffsetCheckpoint]) = {
-      val res = (localCheckPointFile, remoteCheckPoint) match {
-        case (Right(local), Right(remote)) =>
-          logger.info("Overriding local checkpoint file with existing one")
-
-          val localOffsets = local.read().asScala
-          val remoteOffsets = remote.read().asScala
-          Right((localOffsets ++ remoteOffsets).asJava)
-        case (Left(_), Right(remote)) =>
-          logger.info("Overriding local checkpoint file doesn't exist with existing one,using remote")
-
-          Right(remote.read())
-        case _ => {
-          logger.error("Error while overriding local checkpoint file")
-          Left(new IllegalArgumentException("Error while overriding local checkpoint file"))
-
-        }
-      }
-      res.flatMap { newOffsets =>
-
-        val checkpointPath = context.stateDir().toString + "/" + ".checkpoint"
-        logger.info(s"Writing new offsets to local checkpoint file: $checkpointPath with new offset $newOffsets")
-        Try {
-          new OffsetCheckpoint(new File(checkpointPath)).write(newOffsets)
-        }.toEither
-          .tapError(e => logger.error(s"Error while overriding local checkpoint file: $e", e))
+        println()
       }
     }
-
 
     private def fetchAndWriteLocally(context: StateStoreContext): Either[Throwable, Unit] = {
       coreLogicS3Client.getStateStores(context.taskId.toString, name(), context.applicationId())

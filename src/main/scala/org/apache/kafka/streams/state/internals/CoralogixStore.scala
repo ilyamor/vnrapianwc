@@ -10,8 +10,10 @@ import software.amazon.awssdk.core.ResponseInputStream
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.{GetObjectRequest, GetObjectResponse}
+import tools.{Archiver, CheckPointCreator, S3ClientForStore}
 
 import java.io.File
+import java.nio.file.{Files, Path, StandardOpenOption}
 import scala.util.Try
 
 object CoralogixStore extends Logging {
@@ -72,17 +74,32 @@ object CoralogixStore extends Logging {
 
     val coreLogicS3Client = new S3ClientWrapper("cx-snapshot-test")
 
+
+
     override def flush(): Unit = {
       super.flush()
       val newContext = context.asInstanceOf[ ProcessorContextImpl]
 
-      val topic = newContext.changelogFor(name())
+      val stateDir = newContext.stateDir()
+      val storeName = name();
+      val topic = newContext.changelogFor(storeName)
       val partition = newContext.taskId.partition()
       val tp = new TopicPartition(topic, partition)
+      val offset = newContext.recordCollector().offsets().get(tp)
 
-      println(newContext.recordCollector().offsets().get(tp))
+      if (offset != null) {
+        val storePath = s"${stateDir.getAbsolutePath}/$storeName"
+        val tempDir = Files.createTempDirectory(s"$partition-$storeName")
+
+        val files = for {
+          a <- Archiver(tempDir.toFile, offset: Long, new File(storePath)).archive()
+          c <- CheckPointCreator(tempDir.toFile, offset).create()
+          u <- S3ClientForStore("", Region.EU_NORTH_1, storeName, partition, offset).uploadStateStore(a, c)
+        } yield (a, c)
+
+        println()
+      }
     }
-
 
     override def init(context: StateStoreContext, root: StateStore): Unit = {
       this.context = context
@@ -181,6 +198,9 @@ object CoralogixStore extends Logging {
       }
     }
   }
+
+
+
 
 
 }

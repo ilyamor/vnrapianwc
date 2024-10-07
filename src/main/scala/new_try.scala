@@ -169,7 +169,7 @@ object GlobalStoresExample extends Logging {
 
   def main(args: Array[String]): Unit = {
     val bootstrapServers = if (args.length > 0) args(0)
-    else "localhost:9092"
+    else "localhost:29092"
     val schemaRegistryUrl = if (args.length > 1) args(1)
     else "http://localhost:8081"
     val streams = createStreams(bootstrapServers, schemaRegistryUrl, "/tmp/kafka-streams-global-stores")

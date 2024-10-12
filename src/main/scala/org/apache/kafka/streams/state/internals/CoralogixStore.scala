@@ -103,7 +103,7 @@ object CoralogixStore extends Logging {
         val files = for {
           archivedFile <- Archiver(tempDir.toFile, offset: Long, new File(storePath)).archive()
           checkpointFile <- CheckPointCreator(tempDir.toFile, offset).create()
-          uploadResultTriple <- UploadS3ClientForStore("test", "inner", Region.US_EAST_1, s"$applicationId/$storeName", partition).uploadStateStore(archivedFile, checkpointFile)
+          uploadResultTriple <- UploadS3ClientForStore("cx-snapshot-test", "", Region.EU_NORTH_1, s"$applicationId/$storeName").uploadStateStore(archivedFile, checkpointFile)
         } yield uploadResultTriple
 
         files.foreach(triple => println(triple))

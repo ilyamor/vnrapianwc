@@ -1,9 +1,12 @@
 package org.apache.kafka.streams.state.internals
 
+import io.confluent.examples.streams.SnapshotStoreListener.{SnapshotStoreListener, TppStore}
 import org.apache.commons.compress.archivers.ArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.utils.Bytes
+import org.apache.kafka.streams.processor.internals.ProcessorContextImpl
 import org.apache.kafka.streams.processor.{StateStore, StateStoreContext}
 import org.apache.kafka.streams.state.WindowStore
 import org.apache.logging.log4j.scala.Logging
@@ -37,15 +40,12 @@ object CoralogixStore extends Logging {
       println("uploading to s3")
     }
 
-    def getCheckpointFile(partition: String, storeName: String, applicationId: String): Either[Throwable, OffsetCheckpoint] = {
-
+    def getCheckpointFile(context: StateStoreContext, partition: String, storeName: String, applicationId: String): Either[Throwable, OffsetCheckpoint] = {
       val rootPath = s"$applicationId/$partition/$storeName"
       val checkpointPath = s"$rootPath/$CHECKPOINT"
-
-
       Try {
         val res: ResponseInputStream[GetObjectResponse] = s3.getObject(GetObjectRequest.builder().bucket(bucketName).key(checkpointPath).build())
-        val tempFile = File.createTempFile("checkpoint", ".tmp")
+        val tempFile = new File("checkpoint")
 
         Using.resource(new FileOutputStream(tempFile)) {
           fos =>
@@ -76,7 +76,7 @@ object CoralogixStore extends Logging {
     }
   }
 
-  class CoralogixStore(bytesStore: SegmentedBytesStore, retainDuplicates: Boolean, windowSize: Long) extends RocksDBWindowStore(bytesStore, retainDuplicates, windowSize) {
+  class CoralogixStore(bytesStore: SegmentedBytesStore, retainDuplicates: Boolean, windowSize: Long, snapshotStoreListener: SnapshotStoreListener) extends RocksDBWindowStore(bytesStore, retainDuplicates, windowSize) {
 
     var context: StateStoreContext = _
     var root: StateStore = _
@@ -120,11 +120,22 @@ object CoralogixStore extends Logging {
     override def init(context: StateStoreContext, root: StateStore): Unit = {
       this.context = context
       this.root = root
-      getSnapshotStore(context)
+        val newContext = context.asInstanceOf[ProcessorContextImpl]
+        val storeName = name();
+        val topic = newContext.changelogFor(storeName)
+        val partition = newContext.taskId.partition()
+        val tp = new TopicPartition(topic, partition)
+         if(!Option(snapshotStoreListener.taskStore.get(TppStore(tp, storeName))).getOrElse(false))
+            getSnapshotStore(context)
 
       super.init(context, root)
 
 
+    }
+
+    override def close(): Unit = {
+      val newContext = context.asInstanceOf[ProcessorContextImpl]
+      super.close()
     }
 
     private def getSnapshotStore(context: StateStoreContext) = {
@@ -229,7 +240,7 @@ object CoralogixStore extends Logging {
     }
 
     private def fetchRemoteCheckPointFile(context: StateStoreContext): Either[Throwable, OffsetCheckpoint] = {
-      coreLogicS3Client.getCheckpointFile(context.taskId.toString, name(), context.applicationId())
+      coreLogicS3Client.getCheckpointFile(context, context.taskId.toString, name(), context.applicationId())
         .tapError(e => logger.error(s"Error while fetching remote checkpoint: $e"))
         .tapError(e => throw e)
 
@@ -302,7 +313,9 @@ object CoralogixStore extends Logging {
                                  segmentInterval: Long,
                                  windowSize: Long,
                                  retainDuplicates: Boolean,
-                                 returnTimestampedStore: Boolean) extends RocksDbWindowBytesStoreSupplier(name, retentionPeriod, segmentInterval, windowSize, retainDuplicates, returnTimestampedStore) {
+                                 returnTimestampedStore: Boolean,
+                                 snapshotStoreListener: SnapshotStoreListener
+                                ) extends RocksDbWindowBytesStoreSupplier(name, retentionPeriod, segmentInterval, windowSize, retainDuplicates, returnTimestampedStore) {
 
 
     private val windowStoreType = if (returnTimestampedStore) RocksDbWindowBytesStoreSupplier.WindowStoreTypes.TIMESTAMPED_WINDOW_STORE else RocksDbWindowBytesStoreSupplier.WindowStoreTypes.DEFAULT_WINDOW_STORE
@@ -310,7 +323,7 @@ object CoralogixStore extends Logging {
     override def get(): WindowStore[Bytes, Array[Byte]] = {
       windowStoreType match {
         case RocksDbWindowBytesStoreSupplier.WindowStoreTypes.DEFAULT_WINDOW_STORE =>
-          new CoralogixStore(new RocksDBSegmentedBytesStore(name, metricsScope, retentionPeriod, segmentInterval, new WindowKeySchema), retainDuplicates, windowSize)
+          new CoralogixStore(new RocksDBSegmentedBytesStore(name, metricsScope, retentionPeriod, segmentInterval, new WindowKeySchema), retainDuplicates, windowSize, snapshotStoreListener)
 
         case _ =>
           throw new IllegalArgumentException("invalid window store type: " + windowStoreType)

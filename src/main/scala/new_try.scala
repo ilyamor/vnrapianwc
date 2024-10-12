@@ -231,6 +231,7 @@ object GlobalStoresExample extends Logging {
     val snapshotStoreListener = new SnapshotStoreListener(null, "bucketName")
 
     val builder = new StreamsBuilder
+
     // Get the stream of orders
     val ordersStream = builder.stream(ORDER_TOPIC)(Consumed.`with`(Serdes.String(), Serdes.String())).peek((k, v) => {
     }).groupByKey

@@ -1,6 +1,6 @@
 package org.apache.kafka.streams.state.internals
 
-import io.confluent.examples.streams.SnapshotStoreListener.{SnapshotStoreListener, TppStore}
+import io.confluent.examples.streams.SnapshotStoreListener.SnapshotStoreListener
 import org.apache.commons.compress.archivers.ArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
@@ -120,8 +120,8 @@ object CoralogixStore extends Logging {
       val topic = newContext.changelogFor(storeName)
       val partition = newContext.taskId.partition()
       val tp = new TopicPartition(topic, partition)
-         if(!Option(snapshotStoreListener.taskStore.get(TppStore(tp, storeName))).getOrElse(false))
-            getSnapshotStore(context)
+//         if(!Option(snapshotStoreListener.taskStore.get(TppStore(tp, storeName))).getOrElse(false))
+//            getSnapshotStore(context)
       super.init(context, root)
     }
 

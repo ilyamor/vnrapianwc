@@ -122,10 +122,7 @@ object CoralogixStore extends Logging {
       val tp = new TopicPartition(topic, partition)
          if(!Option(snapshotStoreListener.taskStore.get(TppStore(tp, storeName))).getOrElse(false))
             getSnapshotStore(context)
-
       super.init(context, root)
-
-
     }
 
     override def close(): Unit = {

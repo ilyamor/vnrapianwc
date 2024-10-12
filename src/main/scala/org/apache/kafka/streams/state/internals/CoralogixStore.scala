@@ -19,6 +19,8 @@ import tools.{Archiver, CheckPointCreator, UploadS3ClientForStore}
 
 import java.io.{File, FileOutputStream}
 import java.nio.file.Files
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 import scala.jdk.CollectionConverters.{mapAsScalaMapConverter, mutableMapAsJavaMapConverter}
 import scala.util.{Try, Using}
 
@@ -98,16 +100,18 @@ object CoralogixStore extends Logging {
 
       if (!snapshotStoreListener.taskStore.getOrDefault(TppStore(tp, storeName), false)) {
         if (offset != null) {
-          val storePath = s"${stateDir.getAbsolutePath}/$storeName"
-          val tempDir = Files.createTempDirectory(s"$partition-$storeName")
-          val applicationId = context.taskId.toString
-          val files = for {
-            archivedFile <- Archiver(tempDir.toFile, offset: Long, new File(storePath)).archive()
-            checkpointFile <- CheckPointCreator(tempDir.toFile, offset).create()
-            uploadResultTriple <- UploadS3ClientForStore("cx-snapshot-test", "", Region.EU_NORTH_1, s"$applicationId/$storeName").uploadStateStore(archivedFile, checkpointFile)
-          } yield uploadResultTriple
+          Future {
+            val storePath = s"${stateDir.getAbsolutePath}/$storeName"
+            val tempDir = Files.createTempDirectory(s"$partition-$storeName")
+            val applicationId = context.taskId.toString
+            val files = for {
+              archivedFile <- Archiver(tempDir.toFile, offset: Long, new File(storePath)).archive()
+              checkpointFile <- CheckPointCreator(tempDir.toFile, offset).create()
+              uploadResultTriple <- UploadS3ClientForStore("cx-snapshot-test", "", Region.EU_NORTH_1, s"$applicationId/$storeName").uploadStateStore(archivedFile, checkpointFile)
+            } yield uploadResultTriple
 
-          files.foreach(triple => println(triple))
+            files.foreach(triple => println(triple))
+          }
         }
         println()
       }

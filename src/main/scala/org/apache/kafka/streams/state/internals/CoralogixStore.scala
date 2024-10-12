@@ -18,6 +18,7 @@ import tools.EitherOps.EitherOps
 import tools.{Archiver, CheckPointCreator, UploadS3ClientForStore}
 
 import java.io.{File, FileOutputStream}
+import java.nio.file.Files
 import scala.jdk.CollectionConverters.{mapAsScalaMapConverter, mutableMapAsJavaMapConverter}
 import scala.util.{Try, Using}
 

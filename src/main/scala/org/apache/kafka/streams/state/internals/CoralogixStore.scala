@@ -1,6 +1,6 @@
 package org.apache.kafka.streams.state.internals
 
-import io.confluent.examples.streams.SnapshotStoreListener.SnapshotStoreListener
+import io.confluent.examples.streams.SnapshotStoreListener.{SnapshotStoreListener, TppStore}
 import org.apache.commons.compress.archivers.ArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
@@ -96,18 +96,19 @@ object CoralogixStore extends Logging {
       val tp = new TopicPartition(topic, partition)
       val offset = newContext.recordCollector().offsets().get(tp)
 
-      if (offset != null) {
-        val storePath = s"${stateDir.getAbsolutePath}/$storeName"
-        val tempDir = Files.createTempDirectory(s"$partition-$storeName")
-        val applicationId = context.taskId.toString
-        val files = for {
-          archivedFile <- Archiver(tempDir.toFile, offset: Long, new File(storePath)).archive()
-          checkpointFile <- CheckPointCreator(tempDir.toFile, offset).create()
-          uploadResultTriple <- UploadS3ClientForStore("cx-snapshot-test", "", Region.EU_NORTH_1, s"$applicationId/$storeName").uploadStateStore(archivedFile, checkpointFile)
-        } yield uploadResultTriple
+      if (!snapshotStoreListener.taskStore.getOrDefault(TppStore(tp, storeName), false)) {
+        if (offset != null) {
+          val storePath = s"${stateDir.getAbsolutePath}/$storeName"
+          val tempDir = Files.createTempDirectory(s"$partition-$storeName")
+          val applicationId = context.taskId.toString
+          val files = for {
+            archivedFile <- Archiver(tempDir.toFile, offset: Long, new File(storePath)).archive()
+            checkpointFile <- CheckPointCreator(tempDir.toFile, offset).create()
+            uploadResultTriple <- UploadS3ClientForStore("cx-snapshot-test", "", Region.EU_NORTH_1, s"$applicationId/$storeName").uploadStateStore(archivedFile, checkpointFile)
+          } yield uploadResultTriple
 
-        files.foreach(triple => println(triple))
-
+          files.foreach(triple => println(triple))
+        }
         println()
       }
     }
@@ -120,8 +121,8 @@ object CoralogixStore extends Logging {
       val topic = newContext.changelogFor(storeName)
       val partition = newContext.taskId.partition()
       val tp = new TopicPartition(topic, partition)
-//         if(!Option(snapshotStoreListener.taskStore.get(TppStore(tp, storeName))).getOrElse(false))
-//            getSnapshotStore(context)
+       if(!Option(snapshotStoreListener.taskStore.get(TppStore(tp, storeName))).getOrElse(false))
+          getSnapshotStore(context)
       super.init(context, root)
     }
 

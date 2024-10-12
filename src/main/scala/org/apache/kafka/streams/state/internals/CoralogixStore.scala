@@ -87,7 +87,6 @@ object CoralogixStore extends Logging {
 
     val coreLogicS3Client = new S3ClientWrapper("cx-snapshot-test")
 
-
     override def flush(): Unit = {
       super.flush()
       val newContext = context.asInstanceOf[ProcessorContextImpl]
@@ -98,18 +97,21 @@ object CoralogixStore extends Logging {
       val tp = new TopicPartition(topic, partition)
       val offset = newContext.recordCollector().offsets().get(tp)
 
-      if (!snapshotStoreListener.taskStore.getOrDefault(TppStore(tp, storeName), false)) {
+      val tppStore = TppStore(tp, storeName)
+      if (!snapshotStoreListener.taskStore.getOrDefault(tppStore, false)
+        && snapshotStoreListener.workingFlush.getOrDefault(tppStore, true)) {
         if (offset != null) {
           Future {
             val storePath = s"${stateDir.getAbsolutePath}/$storeName"
             val tempDir = Files.createTempDirectory(s"$partition-$storeName")
             val applicationId = context.taskId.toString
+            snapshotStoreListener.workingFlush.put(tppStore, true)
             val files = for {
               archivedFile <- Archiver(tempDir.toFile, offset: Long, new File(storePath)).archive()
               checkpointFile <- CheckPointCreator(tempDir.toFile, offset).create()
               uploadResultTriple <- UploadS3ClientForStore("cx-snapshot-test", "", Region.EU_NORTH_1, s"$applicationId/$storeName").uploadStateStore(archivedFile, checkpointFile)
             } yield uploadResultTriple
-
+            snapshotStoreListener.workingFlush.put(tppStore, false)
             files.foreach(triple => println(triple))
           }
         }

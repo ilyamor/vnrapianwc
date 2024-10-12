@@ -337,6 +337,8 @@ object SnapshotStoreListener {
 
     val taskStore: ConcurrentHashMap[TppStore, Boolean] = new ConcurrentHashMap[TppStore, Boolean]()
 
+    val workingFlush: ConcurrentHashMap[TppStore, Boolean] = new ConcurrentHashMap[TppStore, Boolean]()
+
     override def onRestoreStart(topicPartition: TopicPartition, storeName: String, startingOffset: Long, endingOffset: Long): Unit = {
       println(Thread.currentThread() + "before restore topic" + topicPartition + " store " + storeName)
       taskStore.put(TppStore(topicPartition, storeName), true)

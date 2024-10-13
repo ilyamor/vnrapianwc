@@ -12,9 +12,6 @@ import tools.UploadS3ClientForStore
 
 object CoralogixStore extends Logging {
 
-
-
-
   class CoralogixStore(bytesStore: SegmentedBytesStore, retainDuplicates: Boolean, windowSize: Long, snapshotStoreListener: SnapshotStoreListener) extends RocksDBWindowStore(bytesStore, retainDuplicates, windowSize) {
 
     var context: StateStoreContext = _
@@ -72,6 +69,4 @@ object CoralogixStore extends Logging {
       }
     }
   }
-
-
 }

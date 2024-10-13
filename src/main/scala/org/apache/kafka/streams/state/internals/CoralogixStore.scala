@@ -33,7 +33,7 @@ object CoralogixStore extends Logging {
         s3ClientForStore = s3ClientWrapper,
         context = context.asInstanceOf[ProcessorContextImpl],
         storeName = name())
-//      snapshoter.initFromSnapshot()
+      snapshoter.initFromSnapshot()
       super.init(context, root)
     }
 

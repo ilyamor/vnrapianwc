@@ -141,7 +141,7 @@ object GlobalStoresExample extends Logging {
 
     streamsConfiguration.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers)
     streamsConfiguration.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 18000)
-      streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, "data")
+//      streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, "data")
     //    streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, stateDir)
     streamsConfiguration.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 0)
     streamsConfiguration.put(StreamsConfig.STATESTORE_CACHE_MAX_BYTES_CONFIG, 0)

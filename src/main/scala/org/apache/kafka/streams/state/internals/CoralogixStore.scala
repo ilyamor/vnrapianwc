@@ -13,7 +13,6 @@ import tools.UploadS3ClientForStore
 object CoralogixStore extends Logging {
 
 
-  case class SnapshotFile()
 
 
   class CoralogixStore(bytesStore: SegmentedBytesStore, retainDuplicates: Boolean, windowSize: Long, snapshotStoreListener: SnapshotStoreListener) extends RocksDBWindowStore(bytesStore, retainDuplicates, windowSize) {
@@ -27,14 +26,14 @@ object CoralogixStore extends Logging {
       this.context = context
       this.root = root
       val coreLogicS3Client = new S3ClientWrapper("cx-snapshot-test")
-      val s3ClientWrapper = UploadS3ClientForStore("cx-snapshot-test", "", Region.EU_NORTH_1, s"${context.applicationId()}/${name()}")
+      val s3ClientWrapper = UploadS3ClientForStore("cx-snapshot-test", "", Region.EU_NORTH_1, s"${context.applicationId()}/${context.taskId()}/${name()}")
       this.snapshoter = Snapshoter(
         s3ClientWrapper = coreLogicS3Client,
         snapshotStoreListener = snapshotStoreListener,
         s3ClientForStore = s3ClientWrapper,
         context = context.asInstanceOf[ProcessorContextImpl],
         storeName = name())
-      snapshoter.initFromSnapshot()
+//      snapshoter.initFromSnapshot()
       super.init(context, root)
     }
 

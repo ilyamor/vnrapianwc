@@ -10,7 +10,7 @@ import org.apache.kafka.common.serialization.{Serde, Serdes}
 import org.apache.kafka.common.utils.{SystemTime, Time}
 import org.apache.kafka.streams.kstream.{Consumed, TimeWindows}
 import org.apache.kafka.streams.processor.api.Processor
-import org.apache.kafka.streams.processor.{ProcessorContext, StandbyUpdateListener, StateRestoreListener, StateStore, TaskId, api}
+import org.apache.kafka.streams.processor._
 import org.apache.kafka.streams.scala.ImplicitConversions._
 import org.apache.kafka.streams.scala.kstream.Materialized
 import org.apache.kafka.streams.scala.serialization.Serdes._
@@ -27,78 +27,7 @@ import java.util
 import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
 
-/*
- * Copyright Confluent Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
-
-/**
- * Demonstrates how to perform "joins" between  KStreams and GlobalStore, i.e. joins that
- * don't require re-partitioning of the input streams.
- * <p>
- * The {@link GlobalKTablesExample} shows another way to perform the same operation using
- * {@link org.apache.kafka.streams.kstream.GlobalKTable} and the join operator.
- * <p>
- * In this example, we join a stream of orders that reads from a topic named
- * "order" with a customers global store that reads from a topic named "customer", and a products
- * global store that reads from a topic "product". The join produces an EnrichedOrder object.
- * <p>
- * <br>
- * HOW TO RUN THIS EXAMPLE
- * <p>
- * 1) Start Zookeeper, Kafka, and Confluent Schema Registry. Please refer to <a href="http://docs.confluent.io/current/quickstart.html#quickstart">QuickStart</a>.
- * <p>
- * 2) Create the input/intermediate/output topics used by this example.
- * <pre>
- * {@code
- * $ bin/kafka-topics --create --topic order \
- * --zookeeper localhost:2181 --partitions 4 --replication-factor 1
- * $ bin/kafka-topics --create --topic customer \
- * --zookeeper localhost:2181 --partitions 3 --replication-factor 1
- * $ bin/kafka-topics --create --topic product \
- * --zookeeper localhost:2181 --partitions 2 --replication-factor 1
- * $ bin/kafka-topics --create --topic enriched-order \
- * --zookeeper localhost:2181 --partitions 4 --replication-factor 1
- * }</pre>
- * Note: The above commands are for the Confluent Platform. For Apache Kafka it should be
- * `bin/kafka-topics.sh ...`.
- * <p>
- * 3) Start this example application either in your IDE or on the command line.
- * <p>
- * If via the command line please refer to <a href="https://github.com/confluentinc/kafka-streams-examples#packaging-and-running">Packaging</a>.
- * Once packaged you can then run:
- * <pre>
- * {@code
- * $ java -cp target/kafka-streams-examples-6.0.1-standalone.jar io.confluent.examples.streams.GlobalStoresExample
- * }
- * </pre>
- * 4) Write some input data to the source topics (e.g. via {@link GlobalKTablesAndStoresExampleDriver}). The
- * already running example application (step 3) will automatically process this input data and write
- * the results to the output topic.
- * <pre>
- * {@code
- * # Here: Write input data using the example driver. The driver will exit once it has received
- * # all EnrichedOrders
- * $ java -cp target/kafka-streams-examples-6.0.1-standalone.jar io.confluent.examples.streams.GlobalKTablesAndStoresExampleDriver
- * }
- * </pre>
- * <p>
- * 5) Once you're done with your experiments, you can stop this example via {@code Ctrl-C}. If needed,
- * also stop the Confluent Schema Registry ({@code Ctrl-C}), then stop the Kafka broker ({@code Ctrl-C}), and
- * only then stop the ZooKeeper instance ({@code Ctrl-C}).
- */
 object GlobalStoresExample extends Logging {
   object alala {
     class SerilizedKeyValueStore[K, V](name: String, keySerde: Serde[K], valueSerde: Serde[V]) extends KeyValueStore[K, V] {
@@ -171,7 +100,7 @@ object GlobalStoresExample extends Logging {
 
   def main(args: Array[String]): Unit = {
     val bootstrapServers = if (args.length > 0) args(0)
-    else "localhost:29092"
+    else "localhost:9092"
     val schemaRegistryUrl = if (args.length > 1) args(1)
     else "http://localhost:8081"
     val streams = createStreams(bootstrapServers, schemaRegistryUrl, "/tmp/kafka-streams-global-stores")
@@ -212,7 +141,7 @@ object GlobalStoresExample extends Logging {
 
     streamsConfiguration.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers)
     streamsConfiguration.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 18000)
-//    streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, "data")
+      streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, "data")
     //    streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, stateDir)
     streamsConfiguration.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 0)
     streamsConfiguration.put(StreamsConfig.STATESTORE_CACHE_MAX_BYTES_CONFIG, 0)
@@ -233,15 +162,14 @@ object GlobalStoresExample extends Logging {
     val builder = new StreamsBuilder
 
     // Get the stream of orders
-    val ordersStream = builder.stream(ORDER_TOPIC)(Consumed.`with`(Serdes.String(), Serdes.String())).peek((k, v) => {
-    }).groupByKey
+    val ordersStream = builder.stream(ORDER_TOPIC)(Consumed.`with`(Serdes.String(), Serdes.Long())).groupByKey
 
-    val met: Materialized[String, String, ByteArrayWindowStore] = (Materialized.as(new WindowsCoralogixSupplier("store1", 1000000l, 1000000l, 1000000l, true, false, snapshotStoreListener))(Serdes.String(), Serdes.String()))
+    val met: Materialized[String, Long, ByteArrayWindowStore] = (Materialized.as(new WindowsCoralogixSupplier("store1", 1000000l, 1000000l, 1000000l, false, false, snapshotStoreListener)))
 
     val g = ordersStream
       .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofSeconds(1000000)))
-      .aggregate("") { (k, v, agg) => v + agg }(met).toStream.foreach((k, v) => {
-        //        println(k + " " + v)
+      .aggregate(0l) { (k, v, agg) => v + agg }(met).toStream.foreach((k, v) => {
+        //                println(k + " " + v)
       })
 
     // Add a global store for customers. The data from this global store
@@ -321,7 +249,7 @@ class GlobalStoreUpdater[K, V](private val storeName: String) extends Processor[
 object SnapshotStoreListener {
   case class TppStore(topicPartition: TopicPartition, storeName: String)
 
-  case class SnapshotStoreListener(s3Client: Unit, bucketName: String) extends StateRestoreListener with StandbyUpdateListener{
+  case class SnapshotStoreListener(s3Client: Unit, bucketName: String) extends StateRestoreListener with StandbyUpdateListener {
 
     override def onUpdateStart(topicPartition: TopicPartition, storeName: String, startingOffset: Long): Unit = {
       onRestoreStart(topicPartition, storeName, startingOffset, 0)

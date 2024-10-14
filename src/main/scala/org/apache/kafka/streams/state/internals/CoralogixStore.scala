@@ -8,7 +8,11 @@ import org.apache.kafka.streams.state.WindowStore
 import org.apache.logging.log4j.scala.Logging
 import snapshot.{S3ClientWrapper, Snapshoter}
 import software.amazon.awssdk.regions.Region
+import tools.EitherOps.EitherOps
 import tools.UploadS3ClientForStore
+
+import scala.jdk.CollectionConverters.CollectionHasAsScala
+import scala.util.Try
 
 object CoralogixStore extends Logging {
 
@@ -19,6 +23,7 @@ object CoralogixStore extends Logging {
     var snapshoter: Snapshoter = _
     var s3ClientWrapper: UploadS3ClientForStore = _
 
+    var segments: RocksDBSegmentedBytesStore = _
     override def init(context: StateStoreContext, root: StateStore): Unit = {
       this.context = context
       this.root = root
@@ -31,12 +36,25 @@ object CoralogixStore extends Logging {
         context = context.asInstanceOf[ProcessorContextImpl],
         storeName = name())
       snapshoter.initFromSnapshot()
-      super.init(context, root)
+      Try {
+        super.init(context, root)
+      }.toEither.tapError { e =>
+        logger.error(s"Error while initializing store: ${e.getMessage}")
+      }
+      segments = this.wrapped.asInstanceOf[RocksDBSegmentedBytesStore]
+
     }
 
     override def flush(): Unit = {
       super.flush()
+      segments.getSegments.asScala.foreach(segment => {
+
+        segment.db.pauseBackgroundWork()
+      })
       snapshoter.flushSnapshot()
+      segments.getSegments.asScala.foreach(segment => {
+        segment.db.continueBackgroundWork()
+      })
     }
 
 

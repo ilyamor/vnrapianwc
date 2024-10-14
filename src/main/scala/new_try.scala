@@ -26,6 +26,7 @@ import java.time.Duration
 import java.util
 import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
+import scala.util.Random
 
 
 object GlobalStoresExample extends Logging {
@@ -136,12 +137,12 @@ object GlobalStoresExample extends Logging {
     val streamsConfiguration = new Properties
     // Give the Streams application a unique name.  The name must be unique in the Kafka cluster
     // against which the application is run.
-    streamsConfiguration.put(StreamsConfig.APPLICATION_ID_CONFIG, "global-stores-example1")
+    streamsConfiguration.put(StreamsConfig.APPLICATION_ID_CONFIG, "global-stores-test")
     // Where to find Kafka broker(s).
 
     streamsConfiguration.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers)
     streamsConfiguration.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 18000)
-//      streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, "data")
+      streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, s"data${Random.nextInt(4)}")
     //    streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, stateDir)
     streamsConfiguration.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 0)
     streamsConfiguration.put(StreamsConfig.STATESTORE_CACHE_MAX_BYTES_CONFIG, 0)
@@ -152,10 +153,10 @@ object GlobalStoresExample extends Logging {
     streamsConfiguration.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 100000)
 
     streamsConfiguration.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, 50 * 1024 * 1024)
+    streamsConfiguration.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
 
     // Set to earliest so we don't miss any data that arrived in the topics before the process
     // started
-    streamsConfiguration.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
     // create and configure the SpecificAvroSerdes required in this example
     val snapshotStoreListener = new SnapshotStoreListener(null, "bucketName")
 

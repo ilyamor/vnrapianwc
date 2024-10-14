@@ -253,6 +253,7 @@ object SnapshotStoreListener {
   case class SnapshotStoreListener(s3Client: Unit, bucketName: String) extends StateRestoreListener with StandbyUpdateListener {
 
     override def onUpdateStart(topicPartition: TopicPartition, storeName: String, startingOffset: Long): Unit = {
+      standby.put(TppStore(topicPartition, storeName), true)
       onRestoreStart(topicPartition, storeName, startingOffset, 0)
     }
 
@@ -261,11 +262,12 @@ object SnapshotStoreListener {
     }
 
     override def onUpdateSuspended(topicPartition: TopicPartition, storeName: String, storeOffset: Long, currentEndOffset: Long, reason: StandbyUpdateListener.SuspendReason): Unit = {
-
+      standby.put(TppStore(topicPartition, storeName), false)
       onRestoreSuspended(topicPartition, storeName, currentEndOffset)
     }
 
     val taskStore: ConcurrentHashMap[TppStore, Boolean] = new ConcurrentHashMap[TppStore, Boolean]()
+    val standby: ConcurrentHashMap[TppStore, Boolean] = new ConcurrentHashMap[TppStore, Boolean]()
 
     val workingFlush: ConcurrentHashMap[TppStore, Boolean] = new ConcurrentHashMap[TppStore, Boolean]()
 

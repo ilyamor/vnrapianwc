@@ -9,8 +9,8 @@ import org.apache.kafka.common.serialization.Serdes.StringSerde
 import org.apache.kafka.common.serialization.{Serde, Serdes}
 import org.apache.kafka.common.utils.{SystemTime, Time}
 import org.apache.kafka.streams.kstream.{Consumed, TimeWindows}
-import org.apache.kafka.streams.processor.api.Processor
 import org.apache.kafka.streams.processor._
+import org.apache.kafka.streams.processor.api.Processor
 import org.apache.kafka.streams.scala.ImplicitConversions._
 import org.apache.kafka.streams.scala.kstream.Materialized
 import org.apache.kafka.streams.scala.serialization.Serdes._
@@ -142,7 +142,7 @@ object GlobalStoresExample extends Logging {
 
     streamsConfiguration.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers)
     streamsConfiguration.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 18000)
-      streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, s"data${Random.nextInt(4)}")
+    streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, s"data${Random.nextInt(4)}")
     //    streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, stateDir)
     streamsConfiguration.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 0)
     streamsConfiguration.put(StreamsConfig.STATESTORE_CACHE_MAX_BYTES_CONFIG, 0)
@@ -189,7 +189,7 @@ object GlobalStoresExample extends Logging {
     start.setGlobalStateRestoreListener(snapshotStoreListener)
     start.setStandbyUpdateListener(snapshotStoreListener)
     start.setStateListener((newState, oldState) => {
-      logger.info("changing state ilya " + oldState + newState.name())
+      logger.info("changing state  " + oldState + newState.name())
     })
     //    start.streamsMetadataForStore("store1").asScala.map(_.)
     builder.build()

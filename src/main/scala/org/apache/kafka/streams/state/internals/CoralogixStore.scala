@@ -23,68 +23,68 @@ object CoralogixStore extends Logging {
     var snapshoter: Snapshoter = _
     var s3ClientWrapper: UploadS3ClientForStore = _
 
-    var segments: RocksDBSegmentedBytesStore = _
+    var underlyingStore: RocksDBSegmentedBytesStore = _
+
     override def init(context: StateStoreContext, root: StateStore): Unit = {
       this.context = context
       this.root = root
       val coreLogicS3Client = new S3ClientWrapper("cx-snapshot-test")
       val s3ClientWrapper = UploadS3ClientForStore("cx-snapshot-test", "", Region.EU_NORTH_1, s"${context.applicationId()}/${context.taskId()}/${name()}")
+      underlyingStore = this.wrapped.asInstanceOf[RocksDBSegmentedBytesStore]
+
       this.snapshoter = Snapshoter(
         s3ClientWrapper = coreLogicS3Client,
         snapshotStoreListener = snapshotStoreListener,
         s3ClientForStore = s3ClientWrapper,
         context = context.asInstanceOf[ProcessorContextImpl],
-        storeName = name())
-      snapshoter.initFromSnapshot()
-      Try {
-        super.init(context, root)
-      }.toEither.tapError { e =>
-        logger.error(s"Error while initializing store: ${e.getMessage}")
+        storeName = name(),
+        underlyingStore = underlyingStore,
+        segmentFetcher = { store: RocksDBSegmentedBytesStore => store.getSegments.asScala.map(_.db).toList}
+          )
+          snapshoter.initFromSnapshot()
+          Try {
+            super.init(context, root)
+          }.toEither.tapError { e =>
+            logger.error(s"Error while initializing store: ${e.getMessage}")
+          }
+
+        }
+
+
+      override def flush(): Unit = {
+        super.flush()
+        snapshoter.flushSnapshot()
+
       }
-      segments = this.wrapped.asInstanceOf[RocksDBSegmentedBytesStore]
+
+
+      override def close(): Unit = {
+        super.close()
+      }
+
 
     }
 
-    override def flush(): Unit = {
-      super.flush()
-      segments.getSegments.asScala.foreach(segment => {
-
-        segment.db.pauseBackgroundWork()
-      })
-      snapshoter.flushSnapshot()
-      segments.getSegments.asScala.foreach(segment => {
-        segment.db.continueBackgroundWork()
-      })
-    }
+    class WindowsCoralogixSupplier(name: String,
+                                   retentionPeriod: Long,
+                                   segmentInterval: Long,
+                                   windowSize: Long,
+                                   retainDuplicates: Boolean,
+                                   returnTimestampedStore: Boolean,
+                                   snapshotStoreListener: SnapshotStoreListener
+                                  ) extends RocksDbWindowBytesStoreSupplier(name, retentionPeriod, segmentInterval, windowSize, retainDuplicates, returnTimestampedStore) {
 
 
-    override def close(): Unit = {
-      super.close()
-    }
+      private val windowStoreType = if (returnTimestampedStore) RocksDbWindowBytesStoreSupplier.WindowStoreTypes.TIMESTAMPED_WINDOW_STORE else RocksDbWindowBytesStoreSupplier.WindowStoreTypes.DEFAULT_WINDOW_STORE
 
+      override def get(): WindowStore[Bytes, Array[Byte]] = {
+        windowStoreType match {
+          case RocksDbWindowBytesStoreSupplier.WindowStoreTypes.DEFAULT_WINDOW_STORE =>
+            new CoralogixStore(new RocksDBSegmentedBytesStore(name, metricsScope, retentionPeriod, segmentInterval, new WindowKeySchema), retainDuplicates, windowSize, snapshotStoreListener)
 
-  }
-
-  class WindowsCoralogixSupplier(name: String,
-                                 retentionPeriod: Long,
-                                 segmentInterval: Long,
-                                 windowSize: Long,
-                                 retainDuplicates: Boolean,
-                                 returnTimestampedStore: Boolean,
-                                 snapshotStoreListener: SnapshotStoreListener
-                                ) extends RocksDbWindowBytesStoreSupplier(name, retentionPeriod, segmentInterval, windowSize, retainDuplicates, returnTimestampedStore) {
-
-
-    private val windowStoreType = if (returnTimestampedStore) RocksDbWindowBytesStoreSupplier.WindowStoreTypes.TIMESTAMPED_WINDOW_STORE else RocksDbWindowBytesStoreSupplier.WindowStoreTypes.DEFAULT_WINDOW_STORE
-
-    override def get(): WindowStore[Bytes, Array[Byte]] = {
-      windowStoreType match {
-        case RocksDbWindowBytesStoreSupplier.WindowStoreTypes.DEFAULT_WINDOW_STORE =>
-          new CoralogixStore(new RocksDBSegmentedBytesStore(name, metricsScope, retentionPeriod, segmentInterval, new WindowKeySchema), retainDuplicates, windowSize, snapshotStoreListener)
-
-        case _ =>
-          throw new IllegalArgumentException("invalid window store type: " + windowStoreType)
+          case _ =>
+            throw new IllegalArgumentException("invalid window store type: " + windowStoreType)
+        }
       }
     }
   }
-}

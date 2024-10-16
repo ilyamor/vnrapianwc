@@ -23,7 +23,7 @@ Global / cancelable := true
 
 libraryDependencies ++= Seq(
   "org.apache.kafka" %% "kafka-streams-scala" % "3.8.0",
-  "org.apache.kafka" % "kafka-streams-test-utils" % "3.8.0" % Test,
+//  "org.apache.kafka" % "kafka-streams-test-utils" % "3.8.0" % Test,
   "org.scalatest" %% "scalatest" % "3.2.19" % Test,
   "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % "2.30.9",
   // Use the "provided" scope instead when the "compile-internal" scope is not supported

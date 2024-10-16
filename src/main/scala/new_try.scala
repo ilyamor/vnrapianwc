@@ -2,30 +2,26 @@ package io.confluent.examples.streams
 
 
 import io.confluent.examples.streams.GlobalStoresExample.alala.CoralogixStoreBuilder
-import io.confluent.examples.streams.SnapshotStoreListener.SnapshotStoreListener
 import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.Serdes.StringSerde
 import org.apache.kafka.common.serialization.{Serde, Serdes}
 import org.apache.kafka.common.utils.{SystemTime, Time}
-import org.apache.kafka.streams.kstream.{Consumed, TimeWindows}
+import org.apache.kafka.streams.kstream.{Consumed, TimeWindows, implicitConversion}
 import org.apache.kafka.streams.processor._
 import org.apache.kafka.streams.processor.api.Processor
 import org.apache.kafka.streams.scala.ImplicitConversions._
-import org.apache.kafka.streams.scala.kstream.Materialized
+import org.apache.kafka.streams.scala.StreamsBuilder
 import org.apache.kafka.streams.scala.serialization.Serdes._
-import org.apache.kafka.streams.scala.{ByteArrayWindowStore, StreamsBuilder}
-import org.apache.kafka.streams.state.internals.CoralogixStore.WindowsCoralogixSupplier
 import org.apache.kafka.streams.state.internals._
 import org.apache.kafka.streams.state.{KeyValueIterator, KeyValueStore, RocksDBConfigSetter}
 import org.apache.kafka.streams.{KafkaStreams, KeyValue, StreamsConfig}
 import org.apache.logging.log4j.scala.Logging
 import org.rocksdb.{BlockBasedTableConfig, Options}
+import snapshot.StoreFactory.KStreamOps
 
 import java.time.Duration
 import java.util
 import java.util.Properties
-import java.util.concurrent.ConcurrentHashMap
 import scala.util.Random
 
 
@@ -116,6 +112,7 @@ object GlobalStoresExample extends Logging {
     // is truly needed, i.e., only under certain conditions (e.g., the presence of a command line flag for your app).
     // See `ApplicationResetExample.java` for a production-like example.
     // start processing
+    streams.enableS3Snapshot()
     streams.start()
     // Add shutdown hook to respond to SIGTERM and gracefully close Kafka Streams
     //    Runtime.getRuntime.addShutdownHook(new Thread(streams.close))
@@ -158,18 +155,15 @@ object GlobalStoresExample extends Logging {
     // Set to earliest so we don't miss any data that arrived in the topics before the process
     // started
     // create and configure the SpecificAvroSerdes required in this example
-    val snapshotStoreListener = new SnapshotStoreListener(null, "bucketName")
 
     val builder = new StreamsBuilder
 
     // Get the stream of orders
     val ordersStream = builder.stream(ORDER_TOPIC)(Consumed.`with`(Serdes.String(), Serdes.Long())).groupByKey
 
-    val met: Materialized[String, Long, ByteArrayWindowStore] = (Materialized.as(new WindowsCoralogixSupplier("store1", 1000000l, 1000000l, 1000000l, false, false, snapshotStoreListener)))
-
-    val g = ordersStream
+    ordersStream
       .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofSeconds(1000000)))
-      .aggregate(0l) { (k, v, agg) => v + agg }(met).toStream.foreach((k, v) => {
+      .aggregate(0l) { (k, v, agg) => v + agg }(implicitConversion.windowStoreToSnapshotStore).toStream.foreach((k, v) => {
         //                println(k + " " + v)
       })
 
@@ -186,8 +180,7 @@ object GlobalStoresExample extends Logging {
     // We transform each order with a value transformer which will access each
     // global store to retrieve customer and product linked to the order.
     val start = new KafkaStreams(builder.build, streamsConfiguration)
-    start.setGlobalStateRestoreListener(snapshotStoreListener)
-    start.setStandbyUpdateListener(snapshotStoreListener)
+
     start.setStateListener((newState, oldState) => {
       logger.info("changing state  " + oldState + newState.name())
     })
@@ -247,56 +240,3 @@ class GlobalStoreUpdater[K, V](private val storeName: String) extends Processor[
   }
 }
 
-object SnapshotStoreListener {
-  case class TppStore(topicPartition: TopicPartition, storeName: String)
-
-  case class SnapshotStoreListener(s3Client: Unit, bucketName: String) extends StateRestoreListener with StandbyUpdateListener {
-
-    override def onUpdateStart(topicPartition: TopicPartition, storeName: String, startingOffset: Long): Unit = {
-      standby.put(TppStore(topicPartition, storeName), true)
-      onRestoreStart(topicPartition, storeName, startingOffset, 0)
-    }
-
-    override def onBatchLoaded(topicPartition: TopicPartition, storeName: String, taskId: TaskId, batchEndOffset: Long, batchSize: Long, currentEndOffset: Long): Unit = {
-      onBatchRestored(topicPartition, storeName, batchEndOffset, batchSize)
-    }
-
-    override def onUpdateSuspended(topicPartition: TopicPartition, storeName: String, storeOffset: Long, currentEndOffset: Long, reason: StandbyUpdateListener.SuspendReason): Unit = {
-      standby.put(TppStore(topicPartition, storeName), false)
-      onRestoreSuspended(topicPartition, storeName, currentEndOffset)
-    }
-
-    val taskStore: ConcurrentHashMap[TppStore, Boolean] = new ConcurrentHashMap[TppStore, Boolean]()
-    val standby: ConcurrentHashMap[TppStore, Boolean] = new ConcurrentHashMap[TppStore, Boolean]()
-
-    val workingFlush: ConcurrentHashMap[TppStore, Boolean] = new ConcurrentHashMap[TppStore, Boolean]()
-
-    override def onRestoreStart(topicPartition: TopicPartition, storeName: String, startingOffset: Long, endingOffset: Long): Unit = {
-      println(Thread.currentThread() + "before restore topic" + topicPartition + " store " + storeName)
-      taskStore.put(TppStore(topicPartition, storeName), true)
-    }
-
-    override def onBatchRestored(topicPartition: TopicPartition, storeName: String, batchEndOffset: Long, numRestored: Long): Unit = {
-
-      println(Thread.currentThread() + "on ")
-    }
-
-    override def onRestoreEnd(topicPartition: TopicPartition, storeName: String, totalRestored: Long): Unit = {
-      taskStore.put(TppStore(topicPartition, storeName), false)
-
-      println(Thread.currentThread() + "on end")
-
-    }
-
-    override def onRestoreSuspended(topicPartition: TopicPartition, storeName: String, totalRestored: Long): Unit = {
-      if (totalRestored <= 0)
-        taskStore.put(TppStore(topicPartition, storeName), true)
-      else {
-        taskStore.put(TppStore(topicPartition, storeName), false)
-      }
-      super.onRestoreSuspended(topicPartition, storeName, totalRestored)
-    }
-
-
-  }
-}

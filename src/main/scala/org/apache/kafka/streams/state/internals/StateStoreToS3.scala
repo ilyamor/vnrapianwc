@@ -1,21 +1,24 @@
 package org.apache.kafka.streams.state.internals
 
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.config.ConfigDef.{Importance, Type}
+import org.apache.kafka.common.config.{AbstractConfig, ConfigDef}
 import org.apache.kafka.common.utils.Bytes
 import org.apache.kafka.streams.processor._
 import org.apache.kafka.streams.processor.internals.ProcessorContextImpl
 import org.apache.kafka.streams.state.WindowStore
 import org.apache.logging.log4j.scala.Logging
+import org.rocksdb.RocksDB
 import snapshot.Snapshoter
 import snapshot.tools.UploadS3ClientForStore
-import software.amazon.awssdk.regions.Region
 import utils.EitherOps.EitherOps
 
+import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 import scala.util.Try
 
-object CoralogixStore extends Logging {
+object StateStoreToS3 extends Logging {
 
   object SnapshotStoreListeners {
     case class TppStore(topicPartition: TopicPartition, storeName: String)
@@ -72,95 +75,7 @@ object CoralogixStore extends Logging {
         }
         super.onRestoreSuspended(topicPartition, storeName, totalRestored)
       }
-
-
     }
-  }
-
-  class CoralogixWindowStore(bytesStore: SegmentedBytesStore, retainDuplicates: Boolean, windowSize: Long) extends RocksDBWindowStore(bytesStore, retainDuplicates, windowSize) {
-
-    var context: StateStoreContext = _
-    var root: StateStore = _
-    var snapshoter: Snapshoter[KeyValueSegment,RocksDBSegmentedBytesStore] = _
-    var underlyingStore: RocksDBSegmentedBytesStore = _
-    val snapshotStoreListener: SnapshotStoreListeners.SnapshotStoreListener.type = SnapshotStoreListeners.SnapshotStoreListener
-
-    override def init(context: StateStoreContext, root: StateStore): Unit = {
-      this.context = context
-      this.root = root
-      val s3ClientWrapper = UploadS3ClientForStore("cx-snapshot-test", "", Region.EU_NORTH_1, s"${context.applicationId()}/${context.taskId()}/${name()}")
-      underlyingStore = this.wrapped.asInstanceOf[RocksDBSegmentedBytesStore]
-
-      this.snapshoter = Snapshoter(
-        snapshotStoreListener = snapshotStoreListener,
-        s3ClientForStore = s3ClientWrapper,
-        context = context.asInstanceOf[ProcessorContextImpl],
-        storeName = name(),
-        underlyingStore = underlyingStore,
-        segmentFetcher = { store: RocksDBSegmentedBytesStore => store.getSegments.asScala.map(_.db).toList }
-      )
-      snapshoter.initFromSnapshot()
-      Try {
-        super.init(context, root)
-      }.toEither.tapError { e =>
-        logger.error(s"Error while initializing store: ${e.getMessage}")
-      }
-
-    }
-
-    override def flush(): Unit = {
-      super.flush()
-      snapshoter.flushSnapshot()
-
-    }
-
-    override def close(): Unit = {
-      super.close()
-    }
-
-  }
-
-  class CoralogixTimestampedWindowStore(bytesStore: SegmentedBytesStore, retainDuplicates: Boolean, windowSize: Long) extends RocksDBTimestampedWindowStore(bytesStore, retainDuplicates, windowSize) {
-
-    var context: StateStoreContext = _
-    var root: StateStore = _
-    var snapshoter: Snapshoter[TimestampedSegment,RocksDBTimestampedSegmentedBytesStore] = _
-    var underlyingStore: RocksDBTimestampedSegmentedBytesStore = _
-    val snapshotStoreListener: SnapshotStoreListeners.SnapshotStoreListener.type = SnapshotStoreListeners.SnapshotStoreListener
-
-    override def init(context: StateStoreContext, root: StateStore): Unit = {
-      this.context = context
-      this.root = root
-      val s3ClientWrapper = UploadS3ClientForStore("cx-snapshot-test", "", Region.EU_NORTH_1, s"${context.applicationId()}/${context.taskId()}/${name()}")
-      underlyingStore = this.wrapped.asInstanceOf[RocksDBTimestampedSegmentedBytesStore]
-
-      this.snapshoter = Snapshoter(
-        snapshotStoreListener = snapshotStoreListener,
-        s3ClientForStore = s3ClientWrapper,
-        context = context.asInstanceOf[ProcessorContextImpl],
-        storeName = name(),
-        underlyingStore = underlyingStore,
-        segmentFetcher = { store: RocksDBTimestampedSegmentedBytesStore => store.getSegments.asScala.map(_.db).toList }
-      )
-      snapshoter.initFromSnapshot()
-      Try {
-        super.init(context, root)
-      }.toEither.tapError { e =>
-        logger.error(s"Error while initializing store: ${e.getMessage}")
-      }
-
-    }
-
-    override def flush(): Unit = {
-      super.flush()
-      snapshoter.flushSnapshot()
-
-    }
-
-    override def close(): Unit = {
-      super.close()
-    }
-
   }
 
   class WindowedSnapshotSupplier(name: String,
@@ -169,19 +84,90 @@ object CoralogixStore extends Logging {
                                  windowSize: Long,
                                  retainDuplicates: Boolean,
                                  returnTimestampedStore: Boolean,
-                                ) extends RocksDbWindowBytesStoreSupplier(name, retentionPeriod, segmentInterval, windowSize, retainDuplicates, returnTimestampedStore) {
-
+                                 streamProps: S3StateStoreConfig
+      ) extends RocksDbWindowBytesStoreSupplier(name, retentionPeriod, segmentInterval, windowSize, retainDuplicates, returnTimestampedStore) {
 
     private val windowStoreType = if (returnTimestampedStore) RocksDbWindowBytesStoreSupplier.WindowStoreTypes.TIMESTAMPED_WINDOW_STORE else RocksDbWindowBytesStoreSupplier.WindowStoreTypes.DEFAULT_WINDOW_STORE
 
     override def get(): WindowStore[Bytes, Array[Byte]] = {
       windowStoreType match {
         case RocksDbWindowBytesStoreSupplier.WindowStoreTypes.DEFAULT_WINDOW_STORE =>
-          new CoralogixWindowStore(new RocksDBSegmentedBytesStore(name, metricsScope, retentionPeriod, segmentInterval, new WindowKeySchema), retainDuplicates, windowSize)
+          new CoralogixSegmentedStateStore[RocksDBSegmentedBytesStore, KeyValueSegment](
+            new RocksDBSegmentedBytesStore(name, metricsScope, retentionPeriod, segmentInterval, new WindowKeySchema),
+            retainDuplicates, windowSize, streamProps, { store: RocksDBSegmentedBytesStore => store.getSegments.asScala.map(_.db).toList }
+          )
         case RocksDbWindowBytesStoreSupplier.WindowStoreTypes.TIMESTAMPED_WINDOW_STORE =>
-            new CoralogixTimestampedWindowStore(new RocksDBTimestampedSegmentedBytesStore(name, metricsScope, retentionPeriod, segmentInterval, new WindowKeySchema), retainDuplicates, windowSize)
-
+          new CoralogixSegmentedStateStore[RocksDBTimestampedSegmentedBytesStore, TimestampedSegment](
+            new RocksDBTimestampedSegmentedBytesStore(name, metricsScope, retentionPeriod, segmentInterval, new WindowKeySchema),
+            retainDuplicates, windowSize, streamProps, { store: RocksDBTimestampedSegmentedBytesStore => store.getSegments.asScala.map(_.db).toList }
+          )
       }
     }
   }
+
+  class CoralogixSegmentedStateStore[T <: AbstractRocksDBSegmentedBytesStore[S], S <: Segment]
+              (wrapped: SegmentedBytesStore, retainDuplicates: Boolean, windowSize: Long, config: S3StateStoreConfig, segmentFetcher: T => List[RocksDB])
+      extends RocksDBWindowStore(wrapped, retainDuplicates, windowSize) with Logging {
+
+    var context: StateStoreContext = _
+    var snapshoter: Snapshoter[S, T] = _
+    val snapshotStoreListener: SnapshotStoreListeners.SnapshotStoreListener.type = SnapshotStoreListeners.SnapshotStoreListener
+
+    override def init(context: StateStoreContext, root: StateStore): Unit = {
+      this.context = context
+      // this.root = root
+
+      val s3ClientWrapper = UploadS3ClientForStore(
+        config, s"${context.applicationId()}/${context.taskId()}/${name()}"
+      )
+      val underlyingStore = this.wrapped.asInstanceOf[T]
+      this.snapshoter = Snapshoter(
+        snapshotStoreListener = snapshotStoreListener,
+        s3ClientForStore = s3ClientWrapper,
+        context = context.asInstanceOf[ProcessorContextImpl],
+        storeName = name(),
+        underlyingStore = underlyingStore,
+        segmentFetcher = segmentFetcher
+      )
+      snapshoter.initFromSnapshot()
+      Try {
+        super.init(context, root)
+      }.toEither.tapError { e =>
+        logger.error(s"Error while initializing store: ${e.getMessage}")
+      }
+    }
+
+    override def flush(): Unit = {
+      super.flush()
+      snapshoter.flushSnapshot()
+    }
+
+    override def close(): Unit = {
+      super.close()
+    }
+  }
+
+  object S3StateStoreConfig {
+
+    //def STATE_ENABLED = "state.s3.enabled"
+    def STATE_BUCKET = "state.s3.bucket.name"
+    def STATE_KEY_PREFIX = "state.s3.key.prefix"
+    def STATE_REGION = "state.s3.region"
+    def STATE_S3_ENDPOINT = "state.s3.endpoint"
+
+    private def CONFIG = new ConfigDef()
+      //.define(STATE_ENABLED, Type.BOOLEAN, false, Importance.MEDIUM, "")
+      .define(STATE_BUCKET, Type.STRING, "", Importance.MEDIUM, "")
+      .define(STATE_KEY_PREFIX, Type.STRING, "", Importance.LOW, "")
+      .define(STATE_REGION, Type.STRING, "", Importance.MEDIUM, "")
+      .define(STATE_S3_ENDPOINT, Type.STRING, "", Importance.LOW, "")
+
+
+    def apply(props: Properties): S3StateStoreConfig = {
+      new S3StateStoreConfig(CONFIG, props.asInstanceOf[java.util.Map[Any, Any]])
+    }
+  }
+
+  class S3StateStoreConfig private (definition: ConfigDef, originals: java.util.Map[Any, Any])
+    extends AbstractConfig(definition, originals) {}
 }

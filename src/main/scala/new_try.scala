@@ -1,92 +1,25 @@
 package io.confluent.examples.streams
 
-
-import io.confluent.examples.streams.GlobalStoresExample.alala.CoralogixStoreBuilder
 import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.apache.kafka.common.serialization.Serdes.StringSerde
-import org.apache.kafka.common.serialization.{Serde, Serdes}
-import org.apache.kafka.common.utils.{SystemTime, Time}
+import org.apache.kafka.common.serialization.Serdes
 import org.apache.kafka.streams.kstream.{Consumed, TimeWindows, implicitConversion}
-import org.apache.kafka.streams.processor._
-import org.apache.kafka.streams.processor.api.Processor
 import org.apache.kafka.streams.scala.ImplicitConversions._
 import org.apache.kafka.streams.scala.StreamsBuilder
 import org.apache.kafka.streams.scala.serialization.Serdes._
-import org.apache.kafka.streams.state.internals._
-import org.apache.kafka.streams.state.{KeyValueIterator, KeyValueStore, RocksDBConfigSetter}
-import org.apache.kafka.streams.{KafkaStreams, KeyValue, StreamsConfig}
+import org.apache.kafka.streams.state.internals.StateStoreToS3.S3StateStoreConfig
+import org.apache.kafka.streams.state.RocksDBConfigSetter
+import org.apache.kafka.streams.{KafkaStreams, StreamsConfig}
 import org.apache.logging.log4j.scala.Logging
 import org.rocksdb.{BlockBasedTableConfig, Options}
 import snapshot.StoreFactory.KStreamOps
+import software.amazon.awssdk.regions.Region
 
 import java.time.Duration
 import java.util
 import java.util.Properties
 import scala.util.Random
 
-
 object GlobalStoresExample extends Logging {
-  object alala {
-    class SerilizedKeyValueStore[K, V](name: String, keySerde: Serde[K], valueSerde: Serde[V]) extends KeyValueStore[K, V] {
-
-      val map = new util.HashMap[K, V]()
-
-      override def put(key: K, value: V): Unit = {
-        map.put(key, value)
-      }
-
-      override def putIfAbsent(key: K, value: V): V = {
-        map.putIfAbsent(key, value)
-      }
-
-      override def putAll(entries: util.List[KeyValue[K, V]]): Unit = {
-        //convert list to map
-
-        val map = new util.HashMap[K, V]()
-        entries.forEach(entry => map.put(entry.key, entry.value))
-        map.putAll(map)
-      }
-
-      override def delete(key: K): V = map.remove(key)
-
-      override def get(key: K): V = map.get(key)
-
-      override def range(from: K, to: K): KeyValueIterator[K, V] = ???
-
-      override def all(): KeyValueIterator[K, V] = ???
-
-      override def approximateNumEntries(): Long = map.size()
-
-      override def name(): String = name
-
-
-      override def flush(): Unit = ()
-
-      override def close(): Unit = ()
-
-      override def persistent(): Boolean = false
-
-      override def isOpen: Boolean = false
-
-      override def init(context: ProcessorContext, root: StateStore): Unit = {
-        context.register(root, (key: Array[Byte], value: Array[Byte]) => {
-          val keyDes = keySerde.deserializer().deserialize("", key)
-          val valueDes = valueSerde.deserializer().deserialize("", value)
-          println("inside global store")
-          put(keyDes, valueDes)
-        }
-        )
-      }
-    }
-
-    class CoralogixStoreBuilder[K, V](name: String, keySerdere: Serde[K], valueSerde: Serde[V], time: Time) extends AbstractStoreBuilder[K, V, SerilizedKeyValueStore[K, V]](name, keySerdere, valueSerde, time) {
-
-      override def build(): SerilizedKeyValueStore[K, V] = {
-
-        new SerilizedKeyValueStore[K, V](name, keySerdere, valueSerde)
-      }
-    }
-  }
 
   private[streams] val ORDER_TOPIC = "order"
   private[streams] val CUSTOMER_TOPIC = "customer"
@@ -118,20 +51,14 @@ object GlobalStoresExample extends Logging {
     //    Runtime.getRuntime.addShutdownHook(new Thread(streams.close))
     while (true) {
       Thread.sleep(1000)
-
-
       println(streams.allLocalStorePartitionLags())
-
-
     }
     ()
   }
 
   def createStreams(bootstrapServers: String, schemaRegistryUrl: String, stateDir: String): KafkaStreams = {
-    val storeBuilder1 = new CoralogixStoreBuilder[String, String](CUSTOMER_STORE, new StringSerde(), new StringSerde(), new SystemTime())
-    val storeBuilder2 = new CoralogixStoreBuilder[String, String](PRODUCT_STORE, new StringSerde(), new StringSerde(), new SystemTime())
 
-    val streamsConfiguration = new Properties
+    implicit val streamsConfiguration: Properties = new Properties
     // Give the Streams application a unique name.  The name must be unique in the Kafka cluster
     // against which the application is run.
     streamsConfiguration.put(StreamsConfig.APPLICATION_ID_CONFIG, "global-stores-test")
@@ -141,6 +68,7 @@ object GlobalStoresExample extends Logging {
     streamsConfiguration.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 18000)
     streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, s"data${Random.nextInt(4)}")
     //    streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, stateDir)
+    //streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, s"data")
     streamsConfiguration.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 0)
     streamsConfiguration.put(StreamsConfig.STATESTORE_CACHE_MAX_BYTES_CONFIG, 0)
     streamsConfiguration.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, 0)
@@ -151,6 +79,10 @@ object GlobalStoresExample extends Logging {
 
     streamsConfiguration.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, 50 * 1024 * 1024)
     streamsConfiguration.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
+
+    streamsConfiguration.put(S3StateStoreConfig.STATE_BUCKET, "cx-snapshot-test")
+    streamsConfiguration.put(S3StateStoreConfig.STATE_REGION, Region.EU_NORTH_1.id)
+    //streamsConfiguration.put(S3StateStoreConfig.STATE_S3_ENDPOINT, "http://localhost:9000")
 
     // Set to earliest so we don't miss any data that arrived in the topics before the process
     // started
@@ -212,31 +144,6 @@ object GlobalStoresExample extends Logging {
     }
 
     start
-
-
   }
 
 }
-
-
-// Processor that keeps the global store updated.
-class GlobalStoreUpdater[K, V](private val storeName: String) extends Processor[K, V, Void, Void] {
-  private var store: KeyValueStore[K, V] = null
-
-  override def init(context: api.ProcessorContext[Void, Void]): Unit = {
-
-    store = context.getStateStore(storeName).asInstanceOf[KeyValueStore[K, V]]
-  }
-
-  override def close(): Unit = {
-
-    // No-op
-  }
-
-  override def process(record: api.Record[K, V]): Unit = {
-    println(Thread.currentThread() + "restoring")
-    store.put(record.key, record.value)
-
-  }
-}
-

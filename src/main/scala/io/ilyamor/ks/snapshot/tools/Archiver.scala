@@ -1,4 +1,4 @@
-package snapshot.tools
+package io.ilyamor.ks.snapshot.tools
 
 import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOutputStream}
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream

@@ -1,8 +1,8 @@
-package snapshot.tools
+package io.ilyamor.ks.snapshot.tools
 
+import org.apache.kafka.streams.state.internals.OffsetCheckpoint
 import org.apache.kafka.streams.state.internals.StateStoreToS3.S3StateStoreConfig
 import org.apache.kafka.streams.state.internals.StateStoreToS3.S3StateStoreConfig.STATE_KEY_PREFIX
-import org.apache.kafka.streams.state.internals.OffsetCheckpoint
 import org.apache.logging.log4j.scala.Logging
 import software.amazon.awssdk.core.ResponseInputStream
 import software.amazon.awssdk.core.sync.RequestBody

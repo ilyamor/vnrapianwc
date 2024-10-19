@@ -1,17 +1,17 @@
-package io.confluent.examples.streams
+package io.ilyamor.ks
 
+import io.ilyamor.ks.snapshot.StoreFactory.KStreamOps
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.Serdes
 import org.apache.kafka.streams.kstream.{Consumed, TimeWindows, implicitConversion}
 import org.apache.kafka.streams.scala.ImplicitConversions._
 import org.apache.kafka.streams.scala.StreamsBuilder
 import org.apache.kafka.streams.scala.serialization.Serdes._
-import org.apache.kafka.streams.state.internals.StateStoreToS3.S3StateStoreConfig
 import org.apache.kafka.streams.state.RocksDBConfigSetter
+import org.apache.kafka.streams.state.internals.StateStoreToS3.S3StateStoreConfig
 import org.apache.kafka.streams.{KafkaStreams, StreamsConfig}
 import org.apache.logging.log4j.scala.Logging
 import org.rocksdb.{BlockBasedTableConfig, Options}
-import snapshot.StoreFactory.KStreamOps
 import software.amazon.awssdk.regions.Region
 
 import java.time.Duration
@@ -19,14 +19,11 @@ import java.util
 import java.util.Properties
 import scala.util.Random
 
+import io.ilyamor.ks.utils.EitherOps
+
 object GlobalStoresExample extends Logging {
 
-  private[streams] val ORDER_TOPIC = "order"
-  private[streams] val CUSTOMER_TOPIC = "customer"
-  private[streams] val PRODUCT_TOPIC = "product"
-  private[streams] val CUSTOMER_STORE = "customer-store"
-  private[streams] val PRODUCT_STORE = "product-store"
-  private[streams] val ENRICHED_ORDER_TOPIC = "enriched-order"
+  private val ORDER_TOPIC = "order"
 
   def main(args: Array[String]): Unit = {
     val bootstrapServers = if (args.length > 0) args(0)

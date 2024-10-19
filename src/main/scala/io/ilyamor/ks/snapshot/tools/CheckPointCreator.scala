@@ -1,4 +1,4 @@
-package snapshot.tools
+package io.ilyamor.ks.snapshot.tools
 
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.streams.state.internals.OffsetCheckpoint

@@ -1,5 +1,7 @@
 package org.apache.kafka.streams.state.internals
 
+import io.ilyamor.ks.snapshot.Snapshoter
+import io.ilyamor.ks.snapshot.tools.UploadS3ClientForStore
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.ConfigDef.{Importance, Type}
 import org.apache.kafka.common.config.{AbstractConfig, ConfigDef}
@@ -9,9 +11,7 @@ import org.apache.kafka.streams.processor.internals.ProcessorContextImpl
 import org.apache.kafka.streams.state.WindowStore
 import org.apache.logging.log4j.scala.Logging
 import org.rocksdb.RocksDB
-import snapshot.Snapshoter
-import snapshot.tools.UploadS3ClientForStore
-import utils.EitherOps.EitherOps
+import io.ilyamor.ks.utils.EitherOps.EitherOps
 
 import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
@@ -92,12 +92,12 @@ object StateStoreToS3 extends Logging {
     override def get(): WindowStore[Bytes, Array[Byte]] = {
       windowStoreType match {
         case RocksDbWindowBytesStoreSupplier.WindowStoreTypes.DEFAULT_WINDOW_STORE =>
-          new CoralogixSegmentedStateStore[RocksDBSegmentedBytesStore, KeyValueSegment](
+          new S3StateSegmentedStateStore[RocksDBSegmentedBytesStore, KeyValueSegment](
             new RocksDBSegmentedBytesStore(name, metricsScope, retentionPeriod, segmentInterval, new WindowKeySchema),
             retainDuplicates, windowSize, streamProps, { store: RocksDBSegmentedBytesStore => store.getSegments.asScala.map(_.db).toList }
           )
         case RocksDbWindowBytesStoreSupplier.WindowStoreTypes.TIMESTAMPED_WINDOW_STORE =>
-          new CoralogixSegmentedStateStore[RocksDBTimestampedSegmentedBytesStore, TimestampedSegment](
+          new S3StateSegmentedStateStore[RocksDBTimestampedSegmentedBytesStore, TimestampedSegment](
             new RocksDBTimestampedSegmentedBytesStore(name, metricsScope, retentionPeriod, segmentInterval, new WindowKeySchema),
             retainDuplicates, windowSize, streamProps, { store: RocksDBTimestampedSegmentedBytesStore => store.getSegments.asScala.map(_.db).toList }
           )
@@ -105,7 +105,7 @@ object StateStoreToS3 extends Logging {
     }
   }
 
-  class CoralogixSegmentedStateStore[T <: AbstractRocksDBSegmentedBytesStore[S], S <: Segment]
+  class S3StateSegmentedStateStore[T <: AbstractRocksDBSegmentedBytesStore[S], S <: Segment]
               (wrapped: SegmentedBytesStore, retainDuplicates: Boolean, windowSize: Long, config: S3StateStoreConfig, segmentFetcher: T => List[RocksDB])
       extends RocksDBWindowStore(wrapped, retainDuplicates, windowSize) with Logging {
 

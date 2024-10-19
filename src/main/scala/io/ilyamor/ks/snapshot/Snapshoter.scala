@@ -1,5 +1,7 @@
-package snapshot
+package io.ilyamor.ks.snapshot
 
+import io.ilyamor.ks.snapshot.tools.{Archiver, CheckPointCreator, UploadS3ClientForStore}
+import io.ilyamor.ks.utils.EitherOps.EitherOps
 import org.apache.commons.compress.archivers.ArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
@@ -11,10 +13,8 @@ import org.apache.kafka.streams.state.internals.StateStoreToS3.SnapshotStoreList
 import org.apache.kafka.streams.state.internals.{AbstractRocksDBSegmentedBytesStore, OffsetCheckpoint, Segment}
 import org.apache.logging.log4j.scala.Logging
 import org.rocksdb.RocksDB
-import snapshot.tools.{Archiver, CheckPointCreator, UploadS3ClientForStore}
 import software.amazon.awssdk.core.ResponseInputStream
 import software.amazon.awssdk.services.s3.model.GetObjectResponse
-import utils.EitherOps.EitherOps
 
 import java.io.{File, FileOutputStream}
 import java.lang

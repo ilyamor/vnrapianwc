@@ -1,4 +1,4 @@
-package utils
+package io.ilyamor.ks.utils
 
 import cats.implicits.toBifunctorOps
 

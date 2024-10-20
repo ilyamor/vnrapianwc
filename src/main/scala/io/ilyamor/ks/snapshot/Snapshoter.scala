@@ -37,8 +37,8 @@ case class Snapshoter[S <: Segment, Store <: AbstractRocksDBSegmentedBytesStore[
     Fetcher.initFromSnapshot()
   }
 
-  def flushSnapshot() = {
-    Flusher.flushSnapshot()
+  def flushSnapshot(snapshotFrequency:Int) = {
+    Flusher.flushSnapshot(snapshotFrequency)
   }
 
   private object Fetcher {
@@ -248,7 +248,7 @@ case class Snapshoter[S <: Segment, Store <: AbstractRocksDBSegmentedBytesStore[
       newTempDirFile
     }
 
-    def flushSnapshot(): Unit = {
+    def flushSnapshot(snapshotFrequency:Int): Unit = {
       val stateDir = context.stateDir()
       val topic = context.changelogFor(storeName)
       val partition = context.taskId.partition()
@@ -262,7 +262,7 @@ case class Snapshoter[S <: Segment, Store <: AbstractRocksDBSegmentedBytesStore[
         val sourceTopic = Option(Try(context.topic()).toOption).flatten
         val offset = Option(context.recordCollector())
           .flatMap(collector => Option(collector.offsets().get(tp)))
-        if (offset.isDefined && sourceTopic.isDefined && Random.nextInt(100) == 0) {
+        if (offset.isDefined && sourceTopic.isDefined && Random.nextInt(snapshotFrequency) == 0) {
 
           val time = currentTimeMillis()
           val segments = segmentFetcher(underlyingStore)

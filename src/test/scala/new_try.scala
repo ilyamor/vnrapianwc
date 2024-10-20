@@ -1,9 +1,7 @@
-package io.ilyamor.ks
-
 import io.ilyamor.ks.snapshot.StoreFactory.KStreamOps
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.Serdes
-import org.apache.kafka.streams.kstream.{Consumed, EmitStrategy, TimeWindows, implicitConversion}
+import org.apache.kafka.streams.kstream.{Consumed, TimeWindows, implicitConversion}
 import org.apache.kafka.streams.scala.ImplicitConversions._
 import org.apache.kafka.streams.scala.StreamsBuilder
 import org.apache.kafka.streams.scala.serialization.Serdes._
@@ -18,8 +16,6 @@ import java.time.Duration
 import java.util
 import java.util.Properties
 import scala.util.Random
-
-import io.ilyamor.ks.utils.EitherOps
 
 object GlobalStoresExample extends Logging {
 

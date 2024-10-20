@@ -12,6 +12,7 @@ import org.apache.kafka.streams.state.WindowStore
 import org.apache.logging.log4j.scala.Logging
 import org.rocksdb.RocksDB
 import io.ilyamor.ks.utils.EitherOps.EitherOps
+import org.apache.kafka.streams.state.internals.StateStoreToS3.S3StateStoreConfig.STATE_SNAPSHOT_FREQUENCY
 
 import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
@@ -109,6 +110,7 @@ object StateStoreToS3 extends Logging {
               (wrapped: SegmentedBytesStore, retainDuplicates: Boolean, windowSize: Long, config: S3StateStoreConfig, segmentFetcher: T => List[RocksDB])
       extends RocksDBWindowStore(wrapped, retainDuplicates, windowSize) with Logging {
 
+    var snapshotFrequency:Int = _
     var context: StateStoreContext = _
     var snapshoter: Snapshoter[S, T] = _
     val snapshotStoreListener: SnapshotStoreListeners.SnapshotStoreListener.type = SnapshotStoreListeners.SnapshotStoreListener
@@ -117,6 +119,7 @@ object StateStoreToS3 extends Logging {
       this.context = context
       // this.root = root
 
+      this.snapshotFrequency = Option(config.getString(STATE_SNAPSHOT_FREQUENCY)).getOrElse("20").toInt
       val s3ClientWrapper = UploadS3ClientForStore(
         config, s"${context.applicationId()}/${context.taskId()}/${name()}"
       )
@@ -139,7 +142,7 @@ object StateStoreToS3 extends Logging {
 
     override def flush(): Unit = {
       super.flush()
-      snapshoter.flushSnapshot()
+      snapshoter.flushSnapshot(snapshotFrequency)
     }
 
     override def close(): Unit = {
@@ -154,12 +157,14 @@ object StateStoreToS3 extends Logging {
     def STATE_KEY_PREFIX = "state.s3.key.prefix"
     def STATE_REGION = "state.s3.region"
     def STATE_S3_ENDPOINT = "state.s3.endpoint"
+    def STATE_SNAPSHOT_FREQUENCY = "state.s3.snapshot.frequency"
 
     private def CONFIG = new ConfigDef()
       //.define(STATE_ENABLED, Type.BOOLEAN, false, Importance.MEDIUM, "")
       .define(STATE_BUCKET, Type.STRING, "", Importance.MEDIUM, "")
       .define(STATE_KEY_PREFIX, Type.STRING, "", Importance.LOW, "")
       .define(STATE_REGION, Type.STRING, "", Importance.MEDIUM, "")
+      .define(STATE_S3_ENDPOINT, Type.STRING, "", Importance.LOW, "")
       .define(STATE_S3_ENDPOINT, Type.STRING, "", Importance.LOW, "")
 
 

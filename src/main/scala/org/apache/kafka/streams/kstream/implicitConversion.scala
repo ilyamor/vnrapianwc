@@ -8,7 +8,6 @@ import org.apache.kafka.streams.state._
 import org.apache.kafka.streams.state.internals.StateStoreToS3.{S3StateStoreConfig, WindowedSnapshotSupplier}
 
 import java.util.Properties
-import org.apache.kafka.streams.state.internals.CoralogixStore.WindowedSnapshotSupplier
 import org.apache.kafka.streams.state.internals.RocksDbIndexedTimeOrderedWindowBytesStoreSupplier
 
 object implicitConversion {
@@ -28,6 +27,8 @@ object implicitConversion {
 
   implicit class SnapshotMaterialized[K, V, S <: StateStore](materialized: Materialized[K, V, S]) {
     def withSnapshotEnabled(implicit props: Properties): Materialized[K, V, S] = {
+      if (materialized.dslStoreSuppliers == null)
+        materialized.dslStoreSuppliers = Utils.newInstance(classOf[BuiltInDslStoreSuppliers.RocksDBDslStoreSuppliers], classOf[DslStoreSuppliers])
       materialized.dslStoreSuppliers = new SnapshotStoreSupplier(materialized.dslStoreSuppliers, props)
       materialized
     }
@@ -41,7 +42,6 @@ object implicitConversion {
     override def windowStore(params: DslWindowParams): WindowBytesStoreSupplier = {
       val innerStore = innerSupplier.windowStore(params)
       if (params.emitStrategy.`type` eq EmitStrategy.StrategyType.ON_WINDOW_CLOSE) return RocksDbIndexedTimeOrderedWindowBytesStoreSupplier.create(params.name, params.retentionPeriod, params.windowSize, params.retainDuplicates, params.isSlidingWindow)
-      new WindowedSnapshotSupplier(innerStore.name(), innerStore.retentionPeriod(), innerStore.segmentIntervalMs(), innerStore.windowSize(), innerStore.retainDuplicates(), params.isTimestamped)
       val streamProps = S3StateStoreConfig(props)
       new WindowedSnapshotSupplier(innerStore.name(), innerStore.retentionPeriod(), innerStore.segmentIntervalMs(), innerStore.windowSize(), innerStore.retainDuplicates(), params.isTimestamped, streamProps)
     }

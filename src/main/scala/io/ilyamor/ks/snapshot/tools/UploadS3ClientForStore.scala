@@ -31,7 +31,7 @@ case class UploadS3ClientForStore private(client: S3Client, bucket: String, base
     Try {
       logger.info(s"Fetching checkpoint file from $checkpointPath")
       val res: ResponseInputStream[GetObjectResponse] = client.getObject(GetObjectRequest.builder().bucket(bucket).key(checkpointPath).build())
-      val tempFile = new File("checkpoint")
+      val tempFile = File.createTempFile("checkpoint",".tmp")
 
       Using.resource(new FileOutputStream(tempFile)) {
         fos =>
@@ -118,7 +118,7 @@ object UploadS3ClientForStore {
     val prefix = config.getString(STATE_KEY_PREFIX)
     val region = Region.of(config.getString(S3StateStoreConfig.STATE_REGION))
     val endPoint = if (config.getString(S3StateStoreConfig.STATE_S3_ENDPOINT).endsWith("/"))
-      config.getString(S3StateStoreConfig.STATE_S3_ENDPOINT) else config.getString(S3StateStoreConfig.STATE_S3_ENDPOINT) + "/"
+      config.getString(S3StateStoreConfig.STATE_S3_ENDPOINT) else config.getString(S3StateStoreConfig.STATE_S3_ENDPOINT)
 
     val client: S3Client =
       if (endPoint.isBlank) {

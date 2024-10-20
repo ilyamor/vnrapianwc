@@ -31,7 +31,7 @@ case class Archiver(outputFile: File, sourceDir: File, position: File)  extends 
       }
     }.toEither.flatMap(_ => {
       val hasBytes = new FileInputStream(outputFile).available()
-      sourceDir.delete()
+//      sourceDir.delete()
       if (hasBytes > 0)
         Right(outputFile)
       else

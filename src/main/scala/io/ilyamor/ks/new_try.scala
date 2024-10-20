@@ -3,7 +3,7 @@ package io.ilyamor.ks
 import io.ilyamor.ks.snapshot.StoreFactory.KStreamOps
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.Serdes
-import org.apache.kafka.streams.kstream.{Consumed, TimeWindows, implicitConversion}
+import org.apache.kafka.streams.kstream.{Consumed, EmitStrategy, TimeWindows, implicitConversion}
 import org.apache.kafka.streams.scala.ImplicitConversions._
 import org.apache.kafka.streams.scala.StreamsBuilder
 import org.apache.kafka.streams.scala.serialization.Serdes._
@@ -68,6 +68,8 @@ object GlobalStoresExample extends Logging {
     //streamsConfiguration.put(StreamsConfig.STATE_DIR_CONFIG, s"data")
     streamsConfiguration.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 0)
     streamsConfiguration.put(StreamsConfig.STATESTORE_CACHE_MAX_BYTES_CONFIG, 0)
+//    streamsConfiguration.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 0)
+//    streamsConfiguration.put(StreamsConfig.STATESTORE_CACHE_MAX_BYTES_CONFIG, 0)
     streamsConfiguration.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, 0)
     streamsConfiguration.put(StreamsConfig.STATE_CLEANUP_DELAY_MS_CONFIG, 20000000)
     streamsConfiguration.put(StreamsConfig.PROBING_REBALANCE_INTERVAL_MS_CONFIG, 60000)

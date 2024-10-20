@@ -262,7 +262,7 @@ case class Snapshoter[S <: Segment, Store <: AbstractRocksDBSegmentedBytesStore[
         val sourceTopic = Option(Try(context.topic()).toOption).flatten
         val offset = Option(context.recordCollector())
           .flatMap(collector => Option(collector.offsets().get(tp)))
-        if (offset.isDefined && sourceTopic.isDefined && Random.nextInt(1) == 0) {
+        if (offset.isDefined && sourceTopic.isDefined && Random.nextInt(100) == 0) {
 
           val time = currentTimeMillis()
           val segments = segmentFetcher(underlyingStore)

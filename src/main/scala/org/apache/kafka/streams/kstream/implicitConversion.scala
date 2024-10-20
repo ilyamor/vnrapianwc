@@ -8,6 +8,8 @@ import org.apache.kafka.streams.state._
 import org.apache.kafka.streams.state.internals.StateStoreToS3.{S3StateStoreConfig, WindowedSnapshotSupplier}
 
 import java.util.Properties
+import org.apache.kafka.streams.state.internals.CoralogixStore.WindowedSnapshotSupplier
+import org.apache.kafka.streams.state.internals.RocksDbIndexedTimeOrderedWindowBytesStoreSupplier
 
 object implicitConversion {
 
@@ -38,6 +40,8 @@ object implicitConversion {
 
     override def windowStore(params: DslWindowParams): WindowBytesStoreSupplier = {
       val innerStore = innerSupplier.windowStore(params)
+      if (params.emitStrategy.`type` eq EmitStrategy.StrategyType.ON_WINDOW_CLOSE) return RocksDbIndexedTimeOrderedWindowBytesStoreSupplier.create(params.name, params.retentionPeriod, params.windowSize, params.retainDuplicates, params.isSlidingWindow)
+      new WindowedSnapshotSupplier(innerStore.name(), innerStore.retentionPeriod(), innerStore.segmentIntervalMs(), innerStore.windowSize(), innerStore.retainDuplicates(), params.isTimestamped)
       val streamProps = S3StateStoreConfig(props)
       new WindowedSnapshotSupplier(innerStore.name(), innerStore.retentionPeriod(), innerStore.segmentIntervalMs(), innerStore.windowSize(), innerStore.retainDuplicates(), params.isTimestamped, streamProps)
     }

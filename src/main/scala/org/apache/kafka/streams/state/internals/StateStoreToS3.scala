@@ -98,7 +98,7 @@ object StateStoreToS3 extends Logging {
             retainDuplicates, windowSize, streamProps, { store: RocksDBSegmentedBytesStore => store.getSegments.asScala.map(_.db).toList }
           )
         case RocksDbWindowBytesStoreSupplier.WindowStoreTypes.TIMESTAMPED_WINDOW_STORE =>
-          new S3StateSegmentedStateStore[RocksDBTimestampedSegmentedBytesStore, TimestampedSegment](
+          new S3StateSegmentedStateStoreTimeStamped[RocksDBTimestampedSegmentedBytesStore, TimestampedSegment](
             new RocksDBTimestampedSegmentedBytesStore(name, metricsScope, retentionPeriod, segmentInterval, new WindowKeySchema),
             retainDuplicates, windowSize, streamProps, { store: RocksDBTimestampedSegmentedBytesStore => store.getSegments.asScala.map(_.db).toList }
           )
@@ -109,6 +109,50 @@ object StateStoreToS3 extends Logging {
   class S3StateSegmentedStateStore[T <: AbstractRocksDBSegmentedBytesStore[S], S <: Segment]
               (wrapped: SegmentedBytesStore, retainDuplicates: Boolean, windowSize: Long, config: S3StateStoreConfig, segmentFetcher: T => List[RocksDB])
       extends RocksDBWindowStore(wrapped, retainDuplicates, windowSize) with Logging {
+
+    var snapshotFrequency:Int = _
+    var context: StateStoreContext = _
+    var snapshoter: Snapshoter[S, T] = _
+    val snapshotStoreListener: SnapshotStoreListeners.SnapshotStoreListener.type = SnapshotStoreListeners.SnapshotStoreListener
+
+    override def init(context: StateStoreContext, root: StateStore): Unit = {
+      this.context = context
+      // this.root = root
+
+      this.snapshotFrequency = Option(config.getString(STATE_SNAPSHOT_FREQUENCY)).getOrElse("20").toInt
+      val s3ClientWrapper = UploadS3ClientForStore(
+        config, s"${context.applicationId()}/${context.taskId()}/${name()}"
+      )
+      val underlyingStore = this.wrapped.asInstanceOf[T]
+      this.snapshoter = Snapshoter(
+        snapshotStoreListener = snapshotStoreListener,
+        s3ClientForStore = s3ClientWrapper,
+        context = context.asInstanceOf[ProcessorContextImpl],
+        storeName = name(),
+        underlyingStore = underlyingStore,
+        segmentFetcher = segmentFetcher
+      )
+      snapshoter.initFromSnapshot()
+      Try {
+        super.init(context, root)
+      }.toEither.tapError { e =>
+        logger.error(s"Error while initializing store: ${e.getMessage}")
+      }
+    }
+
+    override def flush(): Unit = {
+      super.flush()
+      snapshoter.flushSnapshot(snapshotFrequency)
+    }
+
+    override def close(): Unit = {
+      super.close()
+    }
+  }
+
+  class S3StateSegmentedStateStoreTimeStamped[T <: AbstractRocksDBSegmentedBytesStore[S], S <: Segment]
+  (wrapped: SegmentedBytesStore, retainDuplicates: Boolean, windowSize: Long, config: S3StateStoreConfig, segmentFetcher: T => List[RocksDB])
+    extends RocksDBTimestampedWindowStore(wrapped, retainDuplicates, windowSize) with Logging {
 
     var snapshotFrequency:Int = _
     var context: StateStoreContext = _

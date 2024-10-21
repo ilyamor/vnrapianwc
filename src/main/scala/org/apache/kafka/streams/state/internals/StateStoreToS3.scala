@@ -57,14 +57,12 @@ object StateStoreToS3 extends Logging {
       }
 
       override def onBatchRestored(topicPartition: TopicPartition, storeName: String, batchEndOffset: Long, numRestored: Long): Unit = {
-
-        println(Thread.currentThread() + "on ")
       }
 
       override def onRestoreEnd(topicPartition: TopicPartition, storeName: String, totalRestored: Long): Unit = {
         taskStore.put(TppStore(topicPartition, storeName), false)
 
-        println(Thread.currentThread() + "on end")
+        println(Thread.currentThread() + "after restore topic" + topicPartition + " store " + storeName)
 
       }
 

@@ -1,6 +1,6 @@
-ThisBuild / version := "0.1.4"
+ThisBuild / version := "0.1.7"
 
-ThisBuild / scalaVersion := "2.13.14"
+scalaVersion := "2.13.14"
 val versions = new {
   val circe = "0.14.4"
   val testContainers = "1.20.2"
@@ -52,12 +52,10 @@ val user = sys.env.getOrElse("JFROG_USER", "ilya.m@coralogix.com")
 //val email = if (user.contains('@')) user else user + "@coralogix.com"
 val pass = sys.env.getOrElse("JFROG_PASSWORD", "AKCp8jR7C3LUkAi3QTrLK9kZ33MAfQsJjAtvVQQH2yRWsm73GP9gDFbFivVG65nNkQXHXePLJ")
 
+resolvers += "Another maven repo" at "https://maven.pkg.github.com/ilyamor/"
 
-resolvers ++= Seq(
-  "Private Artifactory SBT resolver" at "https://cgx.jfrog.io/artifactory/virtual.sbt.coralogix.net",
-  "coralogix-jfrog" at "https://cgx.jfrog.io/artifactory/maven"
-)
-publishMavenStyle := true
-publishTo         := Some(
-  "coralogix-jfrog" at "https://cgx.jfrog.io/artifactory/maven"
-)
+publishConfiguration := publishConfiguration.value.withOverwrite(true)
+ publishLocalConfiguration := publishLocalConfiguration.value.withOverwrite(true)
+
+githubOwner := "ilyamor"
+githubRepository := "ks-snapshot"

@@ -165,7 +165,7 @@ object StateStoreToS3 extends Logging {
       .define(STATE_KEY_PREFIX, Type.STRING, "", Importance.LOW, "")
       .define(STATE_REGION, Type.STRING, "", Importance.MEDIUM, "")
       .define(STATE_S3_ENDPOINT, Type.STRING, "", Importance.LOW, "")
-      .define(STATE_S3_ENDPOINT, Type.STRING, "", Importance.LOW, "")
+      .define(STATE_SNAPSHOT_FREQUENCY, Type.STRING, "20", Importance.LOW, "")
 
 
     def apply(props: Properties): S3StateStoreConfig = {

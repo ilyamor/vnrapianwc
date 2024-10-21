@@ -1,6 +1,6 @@
-import io.ilyamor.ks.snapshot.StoreFactory.KStreamOps
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.Serdes
+import org.apache.kafka.streams.StoreFactory.KStreamOps
 import org.apache.kafka.streams.kstream.{Consumed, TimeWindows, implicitConversion}
 import org.apache.kafka.streams.scala.ImplicitConversions._
 import org.apache.kafka.streams.scala.StreamsBuilder

@@ -1,4 +1,4 @@
-ThisBuild / version := "0.1.8"
+ThisBuild / version := "0.1.9"
 
 scalaVersion := "2.13.14"
 val versions = new {

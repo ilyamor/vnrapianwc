@@ -194,7 +194,7 @@ object StateStoreToS3 extends Logging {
 
   object S3StateStoreConfig {
 
-    //def STATE_ENABLED = "state.s3.enabled"
+    def STATE_ENABLED = "state.s3.enabled"
     def STATE_BUCKET = "state.s3.bucket.name"
     def STATE_KEY_PREFIX = "state.s3.key.prefix"
     def STATE_REGION = "state.s3.region"
@@ -202,7 +202,7 @@ object StateStoreToS3 extends Logging {
     def STATE_SNAPSHOT_FREQUENCY = "state.s3.snapshot.frequency"
 
     private def CONFIG = new ConfigDef()
-      //.define(STATE_ENABLED, Type.BOOLEAN, false, Importance.MEDIUM, "")
+      .define(STATE_ENABLED, Type.BOOLEAN, false, Importance.MEDIUM, "")
       .define(STATE_BUCKET, Type.STRING, "", Importance.MEDIUM, "")
       .define(STATE_KEY_PREFIX, Type.STRING, "", Importance.LOW, "")
       .define(STATE_REGION, Type.STRING, "", Importance.MEDIUM, "")
